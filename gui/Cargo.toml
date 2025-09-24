@@ -1,8 +1,0 @@
-[package]
-name = "sofiefu_gui"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-lachess = { git = "https://github.com/INDA25PlusPlus/wilmerfh-chess.git" }
-ggez = { version = "0.9.3", default-features = false }
