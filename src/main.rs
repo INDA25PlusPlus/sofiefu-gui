@@ -157,7 +157,7 @@ impl ggez::event::EventHandler for MainState {
     }
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: event::MouseButton, x: f32, y: f32,) -> GameResult {
-        println!("Button pressed on coordinates: {button:?}, x: {x}, y: {y}");
+        println!("Button Pressed");
 
         // check if mouse is inside the board 
         if x>=0.0 && x<8.0*side && y>=0.0 && y<8.0*side {
@@ -194,7 +194,7 @@ impl ggez::event::EventHandler for MainState {
 pub fn main() {
     println!("Hello, world!");
     
-    let (mut ctx, event_loop) = ContextBuilder::new("hello_ggez", "awesome_person")
+    let (mut ctx, event_loop) = ContextBuilder::new("hello_ggez", "Sofie")
     .add_resource_path("./resources")
     .build()
     .unwrap();
