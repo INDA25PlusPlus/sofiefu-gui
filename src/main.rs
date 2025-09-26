@@ -93,10 +93,7 @@ impl ggez::event::EventHandler for MainState {
                         },
                         MoveResult::Promotion => {
                             println!("Pawn promotion!");
-                            // Choose promotion piece
                             self.board.resolve_promotion(PieceType::Queen).unwrap();
-                            // Or cancel the promotion
-                            // board.cancel_promotion();
                         },
                         MoveResult::Illegal => {
                             println!("Illegal move");
@@ -111,7 +108,6 @@ impl ggez::event::EventHandler for MainState {
                     }
 
                     // generate valid moves
-                    // Legal moves from a position
                     let legal_destinations = self.board.legal_moves(from);
 
                     for &to in &legal_destinations {
