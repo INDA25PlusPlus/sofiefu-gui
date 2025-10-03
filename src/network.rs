@@ -2,7 +2,7 @@ use std::net::{TcpListener, TcpStream};
 use std::io::prelude::*;
 use std::io::{Read, Write};
 
-const addr: &str = "127.0.0.1:8080";
+const addr: &str = "10.216.184.25:3000";
 // serversida, startar först, Tcplistener för att vänta på anslutningar
 pub fn start_server() -> std::io::Result<TcpStream> {
     let listener = TcpListener::bind(addr)?;

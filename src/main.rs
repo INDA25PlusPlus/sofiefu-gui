@@ -130,14 +130,12 @@ impl MainState {
                     msg.push(self.get_character(piece));
                     ct=0;
                 }
-                else if col == 7 {
+                else { ct = ct + 1; }
+                if col == 7 {
                     if ct>0 && let Some(digit) = from_digit(ct, 10) { msg.push(digit); }
                 }
-                else {
-                    ct=ct+1;
-                }
             }
-            msg.push('/');
+            if row > 0 { msg.push('/');}
         }
         msg.push(':');
 
@@ -163,11 +161,11 @@ impl MainState {
         let mut to = lachess::Position{ file: 10, rank: 10 };
         if let Some(start_c) = msg.chars().nth(9) && let Some(start_r) = msg.chars().nth(10) {
             from.rank = ((start_c as u32)-65) as i8;
-            from.file = ((start_r as u32)-48) as i8;
+            from.file = ((start_r as u32)-49) as i8;
         } 
         if let Some(end_c) = msg.chars().nth(11)  && let Some(end_r) = msg.chars().nth(12) {
             to.rank = ((end_c as u32)-65) as i8;
-            to.file = ((end_r as u32)-48) as i8;
+            to.file = ((end_r as u32)-49) as i8;
         } 
 
         match self.board.make_move(from, to) {
@@ -347,26 +345,26 @@ pub fn main() {
     .unwrap();
 
     // PLAY AS WHITE (CLIENT)
-    // match network::start_client() {
+    match network::start_client() {
+        Ok(stream) => {
+            let state = MainState::new(&mut ctx, true, true, stream); 
+            event::run(ctx, event_loop, state);
+        }
+        Err(e) => {
+            println!("failed to start client");
+        }
+    }
+
+    // PLAY AS BLACK (SERVER)
+    // match network::start_server() {
     //     Ok(stream) => {
-    //         let state = MainState::new(&mut ctx, true, ture, stream); 
+    //         let state = MainState::new(&mut ctx, false, false, stream); 
     //         event::run(ctx, event_loop, state);
     //     }
     //     Err(e) => {
     //         println!("failed to start server");
     //     }
     // }
-
-    // PLAY AS BLACK (SERVER)
-    match network::start_server() {
-        Ok(stream) => {
-            let state = MainState::new(&mut ctx, false, false, stream); 
-            event::run(ctx, event_loop, state);
-        }
-        Err(e) => {
-            println!("failed to start server");
-        }
-    }
 }
 
 
