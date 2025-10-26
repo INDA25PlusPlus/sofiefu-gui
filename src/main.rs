@@ -338,33 +338,44 @@ impl ggez::event::EventHandler for MainState {
 
 }
 
+use std::env;
+
 pub fn main() {
+    let args: Vec<String> = env::args().collect();
+    let player = &args[1];
+
+
     let (mut ctx, event_loop) = ContextBuilder::new("hello_ggez", "Sofie")
     .add_resource_path("./resources")
     .build()
     .unwrap();
 
-    // PLAY AS WHITE (CLIENT)
-    match network::start_client() {
-        Ok(stream) => {
-            let state = MainState::new(&mut ctx, true, true, stream); 
-            event::run(ctx, event_loop, state);
+
+    if player=="client" {
+        // PLAY AS WHITE (CLIENT)
+        match network::start_client() {
+            Ok(stream) => {
+                let state = MainState::new(&mut ctx, true, true, stream); 
+                event::run(ctx, event_loop, state);
+            }
+            Err(e) => {
+                println!("failed to start client");
+            }
         }
-        Err(e) => {
-            println!("failed to start client");
+    }
+    else {
+        // PLAY AS BLACK (SERVER)
+        match network::start_server() {
+            Ok(stream) => {
+                let state = MainState::new(&mut ctx, false, false, stream); 
+                event::run(ctx, event_loop, state);
+            }
+            Err(e) => {
+                println!("failed to start server");
+            }
         }
     }
 
-    // PLAY AS BLACK (SERVER)
-    // match network::start_server() {
-    //     Ok(stream) => {
-    //         let state = MainState::new(&mut ctx, false, false, stream); 
-    //         event::run(ctx, event_loop, state);
-    //     }
-    //     Err(e) => {
-    //         println!("failed to start server");
-    //     }
-    // }
 }
 
 
