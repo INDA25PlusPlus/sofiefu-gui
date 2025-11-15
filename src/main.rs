@@ -18,11 +18,12 @@ mod network;
 struct MainState {
     board: lachess::Board, 
     images: HashMap<String, Image>,
-    start: Option<lachess::Position>, 
+    start: Option<lachess::Position>, // 0 indexed
     end: Option<lachess::Position>,
     stream: TcpStream,
     my_color: bool, // black=0, white=1
     my_turn: bool,
+    game_over: bool
 }
 
 // gui stuff
@@ -51,6 +52,7 @@ impl MainState {
             stream,
             my_color,
             my_turn,
+            game_over: false,
         }
     }
 
@@ -108,10 +110,12 @@ impl MainState {
 
         // game state
         if self.board.is_checkmate() { 
-            if (self.my_color && self.my_turn) || (!self.my_color && !self.my_turn) { msg.push_str("1-0"); }
-            else { msg.push_str("0-1"); }
+            if (self.my_color && self.my_turn) || (!self.my_color && !self.my_turn) {msg.push_str("1-0"); }
+            else {msg.push_str("0-1"); }
         }
-        else if self.board.is_stalemate() {msg.push_str("1-1"); }
+        else if self.board.is_stalemate() {
+            msg.push_str("1-1"); 
+        }
         else { msg.push_str("0-0"); }
         msg.push(':');
 
@@ -149,27 +153,30 @@ impl MainState {
     pub fn rage_quit(&mut self) -> GameResult<()> {
         let msg = "ChessQUIT::000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".to_string();
         network::send_message(&mut self.stream, msg);
-        return Err(GameError::EventLoopError("opponent gave invalid move".to_string())); 
+        return Err(GameError::EventLoopError("We are quitting".to_string())); 
     }  
 
     pub fn receive_move(&mut self, msg: &String) -> GameResult<()> {
-        println!("mottagit drag");
-        if &msg[0..9] == "ChessQUIT" { return Err(GameError::EventLoopError("opponent quited".to_string())); } 
+        println!("Trying to interpret message");
+        if &msg[0..9] == "ChessQUIT" { return Err(GameError::EventLoopError("Opponent quitted".to_string())); } 
 
         // decode move
         let mut from = lachess::Position{ file: 10, rank: 10 };
         let mut to = lachess::Position{ file: 10, rank: 10 };
-        if let Some(start_c) = msg.chars().nth(9) && let Some(start_r) = msg.chars().nth(10) {
-            from.rank = ((start_c as u32)-65) as i8;
-            from.file = ((start_r as u32)-49) as i8;
+        if let Some(start_c) = msg.chars().nth(10) && let Some(start_r) = msg.chars().nth(11) {
+            from.file = ((start_c as u32)-65) as i8;
+            from.rank = ((start_r as u32)-49) as i8;
         } 
-        if let Some(end_c) = msg.chars().nth(11)  && let Some(end_r) = msg.chars().nth(12) {
-            to.rank = ((end_c as u32)-65) as i8;
-            to.file = ((end_r as u32)-49) as i8;
+        if let Some(end_c) = msg.chars().nth(12)  && let Some(end_r) = msg.chars().nth(13) {
+            to.file = ((end_c as u32)-65) as i8;
+            to.rank = ((end_r as u32)-49) as i8;
         } 
+
+        println!("Opponent want to make move from {} {} to {} {}", from.rank, from.file, to.rank, to.file);
 
         match self.board.make_move(from, to) {
             MoveResult::Normal => {
+                println!("Opponents move is accepted!");
                 let my_msg = self.generate_message(false, from.rank, from.file, to.rank, to.file);
                 
                 let mut ct = 0; let mut i = 0;
@@ -177,10 +184,12 @@ impl MainState {
                     if let Some(chA) = my_msg.chars().nth(i) && let Some(chB) = msg.chars().nth(i) { if chA != chB { self.rage_quit(); } } 
                     if let Some(ch) = my_msg.chars().nth(i){ if ch == ':' {ct+=1;} }
                     if ct == 4 {break;}
+                    i+=1;
                 }
             },
             MoveResult::Promotion => {
                 // change to the one they send
+                println!("Opponents move is accepted!");
                 self.board.resolve_promotion(PieceType::Queen).unwrap();
                 let my_msg = self.generate_message(true, from.rank, from.file, to.rank, to.file);
 
@@ -189,12 +198,24 @@ impl MainState {
                     if let Some(chA) = my_msg.chars().nth(i) && let Some(chB) = msg.chars().nth(i) { if chA != chB { self.rage_quit(); } } 
                     if let Some(ch) = my_msg.chars().nth(i){ if ch == ':' {ct+=1;} }
                     if ct == 4 {break;}
+                    i+=1;
                 }
             },
             MoveResult::Illegal => {
+                println!("Opponents move is not accepted!");
                 return self.rage_quit();
             }
         }
+
+        // check if checkmate
+        if let Some(A) = msg.chars().nth(16) && let Some(B) = msg.chars().nth(18) {
+            if A=='1' || B=='1'{
+                println!("End of game accepted");
+                self.game_over = true;
+            }
+        }
+
+
         return Ok(());
     }
 
@@ -203,8 +224,14 @@ impl MainState {
 
 impl ggez::event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        // vänta på meddelande från motståndare
-        if let Some(msg) = network::try_receive_message(&mut self.stream) {
+        if self.game_over {
+            use std::net::Shutdown;
+            let _ = self.stream.shutdown(Shutdown::Both);
+            return Err(GameError::EventLoopError("Game finished".to_string()));
+        }
+        // Waiting for message from opponent
+        if let Some(msg) = network::try_receive_message(&mut self.stream)?{
+            println!("Message received {}", msg);
             if self.my_turn { self.rage_quit(); }
             let res = self.receive_move(&msg);
             self.my_turn = true;
@@ -232,29 +259,35 @@ impl ggez::event::EventHandler for MainState {
 
                 // selected squares
                 if let Some(from) = self.start && let Some(to) = self.end && self.my_turn { // move made
-                    println!("making move");
+                    println!("Trying to make move from {} {} to {} {}", from.rank, from.file, to.rank, to.file);
                     match self.board.make_move(from, to) {
                         MoveResult::Normal => {
-                            println!("move made");
                             self.start = None; self.end = None; 
                             let msg = self.generate_message(false, from.rank, from.file, to.rank, to.file);
                             network::send_message(&mut self.stream, msg);
                             self.my_turn = false;
                         },
                         MoveResult::Promotion => {
-                            println!("pawn promotion!");
                             self.board.resolve_promotion(PieceType::Queen).unwrap();
                             let msg = self.generate_message(true, from.rank, from.file, to.rank, to.file);
-
                             network::send_message(&mut self.stream, msg);
                             self.my_turn = false;
 
                         },
                         MoveResult::Illegal => {
-                            println!("illegal move");
+                            println!("Illegal move");
                             self.start = None;
                             self.end = None;
                         }
+                    }
+
+                    if self.board.is_checkmate()  { 
+                        println!("Game finished, I won");
+                        self.game_over = true;
+                    }
+                    else if self.board.is_stalemate(){
+                        println!("Game finished, we drawed");
+                        self.game_over = true;
                     }
                 }
                 else if let Some(from) = self.start { // square selected
@@ -304,8 +337,6 @@ impl ggez::event::EventHandler for MainState {
     }
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: event::MouseButton, x: f32, y: f32,) -> GameResult {
-        println!("Button Pressed");
-
         // check if mouse is inside the board 
         if x>=0.0 && x<8.0*side && y>=0.0 && y<8.0*side {
             let col = (x / side) as usize; 
@@ -335,7 +366,6 @@ impl ggez::event::EventHandler for MainState {
 
         Ok(())
     }
-
 }
 
 use std::env;
@@ -350,12 +380,13 @@ pub fn main() {
     .build()
     .unwrap();
 
+    
 
     if player=="client" {
         // PLAY AS WHITE (CLIENT)
         match network::start_client() {
             Ok(stream) => {
-                let state = MainState::new(&mut ctx, true, true, stream); 
+                let mut state = MainState::new(&mut ctx, true, true, stream); 
                 event::run(ctx, event_loop, state);
             }
             Err(e) => {
@@ -367,7 +398,7 @@ pub fn main() {
         // PLAY AS BLACK (SERVER)
         match network::start_server() {
             Ok(stream) => {
-                let state = MainState::new(&mut ctx, false, false, stream); 
+                let mut state = MainState::new(&mut ctx, false, false, stream); 
                 event::run(ctx, event_loop, state);
             }
             Err(e) => {
